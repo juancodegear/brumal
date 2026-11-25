@@ -67,13 +67,37 @@ body {
 	margin-bottom: 8px;
 }
 
-@media (orientation: portrait) {
-	#canvas, #status {
-		visibility: hidden;
-	}
-	#gira {
-		display: flex;
-	}
+#carga {
+	position: fixed;
+	left: 50%;
+	bottom: 12%;
+	transform: translateX(-50%);
+	width: min(440px, 86vw);
+	z-index: 30;
+	text-align: center;
+	font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+#carga p {
+	margin: 0 0 10px;
+	color: #f4ead8;
+	font-size: 1rem;
+}
+
+#carga progress {
+	width: 100%;
+	height: 16px;
+	appearance: none;
+}
+
+#carga progress::-webkit-progress-bar {
+	background: #243044;
+	border-radius: 8px;
+}
+
+#carga progress::-webkit-progress-value {
+	background: #e2b15a;
+	border-radius: 8px;
 }
 
 #status, #status-splash, #status-progress {
@@ -162,13 +186,26 @@ body {
 
 		<div id="status">
 			<img id="status-splash" class="show-image--false fullsize--true use-filter--true" src="index.png" alt="">
-			<progress id="status-progress"></progress>
+			<div id="carga">
+				<p id="carga-texto">Preparando Brumal…</p>
+				<progress id="status-progress" value="0" max="100"></progress>
+			</div>
 			<div id="status-notice"></div>
 		</div>
 
-		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":30297016,"index.wasm":39509339},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+		const BRUMAL_VERSION = "28.1";
+		const _brumalFetch = window.fetch.bind(window);
+		window.fetch = function (input, init) {
+			if (typeof input === "string" && /\.(wasm|pck)(\?|$)/.test(input) && input.indexOf("v=") === -1) {
+				input += (input.indexOf("?") === -1 ? "?" : "&") + "v=" + BRUMAL_VERSION;
+			}
+			return _brumalFetch(input, init);
+		};
+		</script>
+		<script src="index.js?v=28.1"></script>
+		<script>
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":30310572,"index.wasm":39509339},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 
@@ -176,6 +213,19 @@ const engine = new Engine(GODOT_CONFIG);
 	const statusOverlay = document.getElementById('status');
 	const statusProgress = document.getElementById('status-progress');
 	const statusNotice = document.getElementById('status-notice');
+	const cargaTexto = document.getElementById('carga-texto');
+	const gira = document.getElementById('gira');
+	let arrancado = false;
+
+	function enHorizontal() {
+		return window.matchMedia('(orientation: landscape)').matches || window.innerWidth >= window.innerHeight;
+	}
+
+	function decir(texto) {
+		if (cargaTexto) {
+			cargaTexto.textContent = texto;
+		}
+	}
 
 	let initializing = true;
 	let statusMode = '';
@@ -227,24 +277,61 @@ const engine = new Engine(GODOT_CONFIG);
 		const missingMsg = 'Faltan funciones del navegador para abrir Brumal:\n';
 		displayFailureNotice(missingMsg + missing.join('\n'));
 	} else {
-		setStatusMode('progress');
-		engine.startGame({
-			'onProgress': function (current, total) {
-				if (current > 0 && total > 0) {
-					statusProgress.value = current;
-					statusProgress.max = total;
-				} else {
-					statusProgress.removeAttribute('value');
-					statusProgress.removeAttribute('max');
-				}
-			},
-		}).then(() => {
+		window.brumalListo = function () {
 			setStatusMode('hidden');
 			const canvas = document.getElementById('canvas');
 			if (canvas) {
 				canvas.focus();
 			}
-		}, displayFailureNotice);
+		};
+		function arrancar() {
+			if (arrancado) {
+				return;
+			}
+			if (!enHorizontal()) {
+				if (gira) {
+					gira.style.display = 'flex';
+				}
+				decir('Gira el teléfono. El valle se abre en horizontal.');
+				return;
+			}
+			if (gira) {
+				gira.style.display = 'none';
+			}
+			const canvas = document.getElementById('canvas');
+			if (canvas && canvas.clientWidth < 16) {
+				decir('Ajustando la pantalla…');
+				window.requestAnimationFrame(arrancar);
+				return;
+			}
+			arrancado = true;
+			setStatusMode('progress');
+			decir('Descargando el valle…');
+			engine.startGame({
+				'onProgress': function (current, total) {
+					if (current > 0 && total > 0) {
+						statusProgress.value = current;
+						statusProgress.max = total;
+						const pct = Math.round((current / total) * 100);
+						decir('Descargando el valle… ' + pct + '%');
+					} else {
+						decir('Compilando…');
+					}
+				},
+			}).then(() => {
+				decir('Entrando al valle…');
+			}, displayFailureNotice);
+			window.setTimeout(function () {
+				if (statusOverlay && statusOverlay.isConnected && arrancado) {
+					decir('Sigue cargando. Si se queda aquí, recarga la página.');
+				}
+			}, 45000);
+		}
+		window.addEventListener('resize', arrancar);
+		window.addEventListener('orientationchange', function () {
+			window.setTimeout(arrancar, 200);
+		});
+		arrancar();
 	}
 }());
 		</script>
