@@ -117,7 +117,7 @@ body {
 	flex-direction: column;
 	justify-content: center;
 	align-items: center;
-	visibility: hidden;
+	visibility: visible;
 }
 
 #status-splash {
@@ -194,19 +194,58 @@ body {
 		</div>
 
 		<script>
-		const BRUMAL_VERSION = "49.1";
+		const BRUMAL_VERSION = "50.1";
+		function brumalBust(url) {
+			if (typeof url !== "string") {
+				return url;
+			}
+			if (!/\.(wasm|pck|js)(\?|#|$)/.test(url) || /[?&]v=/.test(url)) {
+				return url;
+			}
+			return url + (url.indexOf("?") === -1 ? "?" : "&") + "v=" + BRUMAL_VERSION;
+		}
 		const _brumalFetch = window.fetch.bind(window);
 		window.fetch = function (input, init) {
-			if (typeof input === "string" && /\.(wasm|pck)(\?|$)/.test(input) && input.indexOf("v=") === -1) {
-				input += (input.indexOf("?") === -1 ? "?" : "&") + "v=" + BRUMAL_VERSION;
+			if (typeof input === "string") {
+				input = brumalBust(input);
+			} else if (typeof Request !== "undefined" && input instanceof Request) {
+				const siguiente = brumalBust(input.url);
+				if (siguiente !== input.url) {
+					input = new Request(siguiente, input);
+				}
 			}
 			return _brumalFetch(input, init);
 		};
+		const _brumalOpen = XMLHttpRequest.prototype.open;
+		XMLHttpRequest.prototype.open = function (method, url) {
+			const args = Array.prototype.slice.call(arguments);
+			if (typeof url === "string") {
+				args[1] = brumalBust(url);
+			}
+			return _brumalOpen.apply(this, args);
+		};
+		window.addEventListener("error", function (evento) {
+			const aviso = document.getElementById("status-notice");
+			const estado = document.getElementById("status");
+			if (estado) {
+				estado.style.visibility = "visible";
+			}
+			if (aviso) {
+				aviso.style.display = "block";
+				aviso.textContent = "No se pudo abrir Brumal. " + (evento.message || "Error de arranque.");
+			}
+		});
 		</script>
-		<script src="index.js?v=49.1"></script>
+		<script src="index.js?v=50.1"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":19380916,"index.wasm":39509339},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":21030020,"index.wasm":39509339},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
 const GODOT_THREADS_ENABLED = false;
+GODOT_CONFIG.mainPack = (GODOT_CONFIG.executable || "index") + ".pck?v=" + BRUMAL_VERSION;
+if (GODOT_CONFIG.fileSizes) {
+	const exe = GODOT_CONFIG.executable || "index";
+	GODOT_CONFIG.fileSizes[exe + ".pck?v=" + BRUMAL_VERSION] = GODOT_CONFIG.fileSizes[exe + ".pck"];
+	GODOT_CONFIG.fileSizes[exe + ".wasm?v=" + BRUMAL_VERSION] = GODOT_CONFIG.fileSizes[exe + ".wasm"];
+}
 const engine = new Engine(GODOT_CONFIG);
 
 (function () {
